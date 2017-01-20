@@ -11,6 +11,7 @@ import org.springframework.util.ClassUtils;
 
 import java.io.IOException;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -85,11 +86,9 @@ public class CustomEnumScanner {
     }
 
     private List<EnumData> getEnumData(Class<? extends Enum<? extends CustomEnum>> type) {
-        List<EnumData> list = new ArrayList<>();
-        for (Enum<? extends CustomEnum> enumValue : type.getEnumConstants()) {
-            list.add(new EnumData(enumValue));
-        }
-        return list;
+        return Stream.of(type.getFields())
+                .map(EnumData::new)
+                .collect(Collectors.toList());
     }
 
     @Immutable
@@ -97,10 +96,10 @@ public class CustomEnumScanner {
         private final Enum<? extends CustomEnum> enumValue;
         private final Map<Class<? extends Annotation>, Object> annotations;
 
-        EnumData(Enum<? extends CustomEnum> enumValue) {
+        EnumData(Field field) {
             try {
-                this.enumValue = enumValue;
-                annotations = Stream.of(enumValue.getClass().getField(enumValue.toString()).getAnnotations())
+                this.enumValue = (Enum<? extends CustomEnum>) field.get(null);
+                annotations = Stream.of(field.getAnnotations())
                         .collect(Collectors.toMap(Annotation::annotationType, this::getAnnotationValue));
             } catch (Exception e) {
                 throw new RuntimeException(e);
