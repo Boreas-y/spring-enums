@@ -87,6 +87,7 @@ public class CustomEnumScanner {
 
     private List<EnumData> getEnumData(Class<? extends Enum<? extends CustomEnum>> type) {
         return Stream.of(type.getFields())
+                .filter(Field::isEnumConstant)
                 .map(EnumData::new)
                 .collect(Collectors.toList());
     }
