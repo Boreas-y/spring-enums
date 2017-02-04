@@ -1,6 +1,7 @@
 package org.boreas.common.enums;
 
 import org.boreas.common.enums.annotation.Alias;
+import org.boreas.common.enums.annotation.Boolean;
 import org.boreas.common.enums.annotation.Int;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.util.Assert;
@@ -13,7 +14,7 @@ import java.util.List;
 class CustomEnumContext implements InitializingBean {
 
 
-    private static EnumCache<Object> enumValueCache = new EnumCache<>(CustomValue.class, Int.class);
+    private static EnumCache<Object> enumValueCache = new EnumCache<>(CustomValue.class, Int.class, Boolean.class);
     private static EnumCache<String> enumAliasCache = new EnumCache<>(AliasName.class, Alias.class);
     private static CustomEnumScanner scanner;
 
