@@ -11,6 +11,6 @@ public interface AliasName extends CustomEnum {
     default String alias() {
         Enum<?> enumVal = (Enum<?>) this;
         String alias = CustomEnumContext.aliasOf(enumVal);
-        return StringUtils.isEmpty(alias) ? enumVal.toString() : alias;
+        return StringUtils.isEmpty(alias) ? enumVal.name() : alias;
     }
 }
