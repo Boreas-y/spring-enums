@@ -18,8 +18,10 @@ public class CustomEnumType extends EnumType {
         if (rs.wasNull())
             return null;
         Object object = rs.getObject(names[0]);
-        return CustomValue.enumOf(returnedClass(), object);
-
+        Object result = CustomValue.enumOf(returnedClass(), object);
+        if (object != null && result == null)
+            throw new IllegalArgumentException(String.format("Unknown value [%s] for enum class [%s]", object, returnedClass()));
+        return result;
     }
 
     @Override

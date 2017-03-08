@@ -12,14 +12,18 @@ import org.springframework.util.ClassUtils;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.util.*;
+import java.util.function.BiFunction;
+import java.util.function.BinaryOperator;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class CustomEnumScanner {
 
     /**
-     * 注解取值的方法名
+     * default method name
      */
     private static final String ANNOTATION_METHOD_NAME = "value";
 
@@ -48,18 +52,31 @@ public class CustomEnumScanner {
     }
 
     <T> Map<Enum<? extends CustomEnum>, T> scan(Class<? extends CustomEnum> type,
-                                                List<Class<? extends Annotation>> annotationTypes) {
+                                                LinkedHashMap<Class<? extends Annotation>, BiFunction<Enum, Annotation, Object>> annotationsTypes) {
         return enumDataList.stream()
                 .filter(d -> type.isAssignableFrom(d.enumValue.getClass()))
-                .filter(d -> d.getAnnotations().keySet().stream().anyMatch(annotationTypes::contains))
-                .collect(Collectors.toMap(EnumData::getEnumValue,
-                        d -> (T) d.getAnnotations().entrySet().stream()
-                                .filter(e -> annotationTypes.contains(e.getKey())).findFirst().get().getValue()));
+                .filter(d -> annotationsTypes.keySet().stream().anyMatch(a -> d.annotations.containsKey(a)))
+                .collect(Collectors.toMap(EnumData::getEnumValue, d -> (T) getValue(d, annotationsTypes)));
     }
 
-    /**
-     * 获取指定包下所有的 Resource
-     */
+    private Object getValue(EnumData enumData, LinkedHashMap<Class<? extends Annotation>, BiFunction<Enum, Annotation, Object>> annotationsTypes) {
+        return annotationsTypes.entrySet().stream()
+                .filter(entry -> enumData.annotations.containsKey(entry.getKey()))
+                .map(entry -> entry.getValue() != null
+                        ? entry.getValue().apply(enumData.enumValue, enumData.annotations.get(entry.getKey()))
+                        : getDefaultValue(enumData.annotations.get(entry.getKey())))
+                .reduce((a, b) -> b)
+                .orElse(null);
+    }
+
+    private Object getDefaultValue(Annotation annotation) {
+        try {
+            return annotation.getClass().getMethod(ANNOTATION_METHOD_NAME).invoke(annotation);
+        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private Resource[] getResources(String basePackage) {
         String resourcePath = new StringBuilder(ResourcePatternResolver.CLASSPATH_ALL_URL_PREFIX)
                 .append(ClassUtils.convertClassNameToResourcePath(basePackage))
@@ -73,9 +90,6 @@ public class CustomEnumScanner {
         }
     }
 
-    /**
-     * 根据 Resource 获取枚举类，如果不是枚举类则返回 null
-     */
     private Class<? extends Enum<? extends CustomEnum>> getClassFromResource(Resource resource) {
         try {
             MetadataReader reader = factory.getMetadataReader(resource);
@@ -86,30 +100,28 @@ public class CustomEnumScanner {
     }
 
     private List<EnumData> getEnumData(Class<? extends Enum<? extends CustomEnum>> type) {
+        Map<Class<? extends Annotation>, Annotation> annotationsOnClass = Stream.of(type.getAnnotations())
+                .collect(Collectors.toMap(Annotation::annotationType, Function.identity()));
         return Stream.of(type.getFields())
                 .filter(Field::isEnumConstant)
-                .map(EnumData::new)
+                .map(field -> new EnumData(field, annotationsOnClass))
                 .collect(Collectors.toList());
     }
 
     @Immutable
     public static class EnumData {
         private final Enum<? extends CustomEnum> enumValue;
-        private final Map<Class<? extends Annotation>, Object> annotations;
+        private final Map<Class<? extends Annotation>, Annotation> annotations;
 
-        EnumData(Field field) {
+        EnumData(Field field, Map<Class<? extends Annotation>, Annotation> annotationsOnClass) {
             try {
                 this.enumValue = (Enum<? extends CustomEnum>) field.get(null);
-                annotations = Stream.of(field.getAnnotations())
-                        .collect(Collectors.toMap(Annotation::annotationType, this::getAnnotationValue));
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        private Object getAnnotationValue(Annotation annotation) {
-            try {
-                return annotation.annotationType().getMethod(ANNOTATION_METHOD_NAME).invoke(annotation);
+                Map<Class<? extends Annotation>, Annotation> annotationsOnValue = Stream.of(field.getAnnotations())
+                        .collect(Collectors.toMap(Annotation::annotationType, Function.identity()));
+                Map<Class<? extends Annotation>, Annotation> temp = new HashMap<>();
+                temp.putAll(annotationsOnValue);
+                temp.putAll(annotationsOnClass);
+                annotations = Collections.unmodifiableMap(temp);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -117,10 +129,6 @@ public class CustomEnumScanner {
 
         public Enum<? extends CustomEnum> getEnumValue() {
             return enumValue;
-        }
-
-        public Map<Class<? extends Annotation>, Object> getAnnotations() {
-            return annotations;
         }
     }
 }

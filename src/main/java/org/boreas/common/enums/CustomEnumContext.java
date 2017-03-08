@@ -3,29 +3,46 @@ package org.boreas.common.enums;
 import org.boreas.common.enums.annotation.Alias;
 import org.boreas.common.enums.annotation.Boolean;
 import org.boreas.common.enums.annotation.Int;
+import org.boreas.common.enums.annotation.Sequence;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.util.Assert;
 
+import java.lang.annotation.Annotation;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.function.BiFunction;
 
 /**
  * @author boreas
  */
 class CustomEnumContext implements InitializingBean {
 
+    private static LinkedHashMap<Class<? extends Annotation>, BiFunction<Enum, Annotation, Object>> valueAnnotations;
+    private static LinkedHashMap<Class<? extends Annotation>, BiFunction<Enum, Annotation, Object>> aliasAnnotations;
 
-    private static EnumCache<Object> enumValueCache = new EnumCache<>(CustomValue.class, Int.class, Boolean.class);
-    private static EnumCache<String> enumAliasCache = new EnumCache<>(AliasName.class, Alias.class);
+    static {
+        // init default
+        valueAnnotations = new LinkedHashMap<>();
+        valueAnnotations.put(Sequence.class, (t, a) -> ((Sequence) a).start() + t.ordinal());
+        valueAnnotations.put(Int.class, null);
+        valueAnnotations.put(Boolean.class, null);
+
+        aliasAnnotations = new LinkedHashMap<>();
+        aliasAnnotations.put(Alias.class, null);
+    }
+
+    private static EnumCache<Object> enumValueCache;
+    private static EnumCache<String> enumAliasCache;
     private static CustomEnumScanner scanner;
 
     /**
-     * 是否初始化自定义值
+     * initialize enum custom value or not
      */
-    private boolean customValue = true;
+    private static boolean customValue = true;
     /**
-     * 是否初始化别名
+     * initialize enum alias name or not
      */
-    private boolean aliasName = true;
+    private static boolean aliasName = true;
 
     @SuppressWarnings("unchecked")
     public static <T> T valueOf(Enum<? extends CustomEnum> enumValue) {
@@ -37,7 +54,7 @@ class CustomEnumContext implements InitializingBean {
     }
 
     public static String aliasOf(Enum<?> enumValue) {
-        return enumAliasCache.getObj(enumValue, enumValue.toString());
+        return enumAliasCache.getObj(enumValue, enumValue.name());
     }
 
     public void setBasePackages(List<String> basePackages) {
@@ -52,9 +69,19 @@ class CustomEnumContext implements InitializingBean {
         this.aliasName = aliasName;
     }
 
+    public void setValueAnnotations(LinkedHashMap<Class<? extends Annotation>, BiFunction<Enum, Annotation, Object>> valueAnnotations) {
+        CustomEnumContext.valueAnnotations = valueAnnotations;
+    }
+
+    public void setAliasAnnotations(LinkedHashMap<Class<? extends Annotation>, BiFunction<Enum, Annotation, Object>> aliasAnnotations) {
+        CustomEnumContext.aliasAnnotations = aliasAnnotations;
+    }
+
     @Override
     public void afterPropertiesSet() throws Exception {
         Assert.notNull(scanner, "basePackages must be set first!");
+        enumValueCache = new EnumCache<>(CustomValue.class, valueAnnotations);
+        enumAliasCache = new EnumCache<>(AliasName.class, aliasAnnotations);
         if (customValue)
             enumValueCache.init(scanner);
         if (aliasName)
